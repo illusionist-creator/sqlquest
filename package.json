@@ -1,0 +1,19 @@
+{
+  "name": "sqlquest",
+  "version": "0.1.0",
+  "description": "Gamified SQL learning platform - lessons, challenges, drills, persistent progress",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server.js",
+    "verify": "node scripts/verify-content.mjs"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.22.3",
+    "sql.js": "^1.13.0"
+  }
+}
