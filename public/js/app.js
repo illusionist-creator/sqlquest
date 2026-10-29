@@ -29,7 +29,7 @@ function toast(msg, kind = '') {
   setTimeout(() => el.remove(), 3500);
 }
 async function api(path, opts = {}) {
-  const res = await fetch('/api' + path, {
+  const res = await fetch('api' + path, {
     method: opts.method || 'GET',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'same-origin',
@@ -54,20 +54,38 @@ function toggleTheme() {
 // ---------------------------------------------------------------------------
 // Session / progress store (server for accounts, localStorage for guests)
 // ---------------------------------------------------------------------------
-const state = { user: null, progress: null, guest: false, loaded: false };
+const state = { user: null, progress: null, guest: false, loaded: false, hasServer: true };
+const REPO_URL = 'https://github.com/illusionist-creator/sqlquest';
+
+/** True when the Node API is reachable; false on static hosting such as GitHub Pages. */
+async function detectServer() {
+  try {
+    const r = await fetch('api/health', { credentials: 'same-origin', cache: 'no-store' });
+    if (!r.ok) return false;
+    const j = await r.json().catch(() => null);
+    return !!(j && j.ok === true);
+  } catch { return false; }
+}
 const GUEST_KEY = 'sq_guest';
 
 const store = {
   async load() {
-    try {
-      const me = await api('/me');
+    state.hasServer = await detectServer();
+    let me = null;
+    if (state.hasServer) { try { me = await api('/me'); } catch { me = null; } }
+    if (me) {
       state.user = me.user; state.progress = { ...emptyState(), ...me.progress }; state.guest = false;
-    } catch {
+    } else {
       const g = LS.get(GUEST_KEY);
       if (g) { state.guest = true; state.progress = { ...emptyState(), ...g.progress }; state.user = { username: 'Guest', start_level: g.start_level || 1, guest: true }; }
       else { state.user = null; state.progress = null; state.guest = false; }
     }
     state.loaded = true;
+  },
+  resetGuest() {
+    LS.del(GUEST_KEY);
+    try { for (const k of Object.keys(localStorage)) if (k.startsWith('sq_draft_')) LS.del(k); } catch { /* ignore */ }
+    state.user = null; state.progress = null; state.guest = false;
   },
   startGuest(start_level) {
     const g = { start_level, progress: emptyState(), history: [] };
@@ -145,7 +163,7 @@ function renderTopbar() {
   const box = $('#userbox');
   const themeBtn = `<button class="icon-btn" id="themeBtn" title="Toggle theme">${currentTheme() === 'dark' ? '☀️' : '🌙'}</button>`;
   if (!state.user) {
-    box.innerHTML = `${themeBtn}<a class="btn sm primary" href="#/auth">Log in</a>`;
+    box.innerHTML = `${themeBtn}<a class="btn sm primary" href="#/auth">${state.hasServer ? 'Log in' : 'Start'}</a>`;
   } else {
     const p = state.progress;
     const r = rankFor(p.xp);
@@ -371,6 +389,7 @@ function levelChoiceHTML(selected = 1, name = 'lvl') {
 function viewAuth(view, query) {
   let tab = query.tab === 'register' ? 'register' : 'login';
   const guestProgress = LS.get(GUEST_KEY);
+  if (!state.hasServer) return viewStaticStart(view, guestProgress);
   const render = () => {
     view.innerHTML = `
     <div class="auth-wrap">
@@ -428,6 +447,36 @@ function viewAuth(view, query) {
   render();
 }
 
+/** Start screen for the browser-only build (static hosting, no accounts). */
+function viewStaticStart(view, guestProgress) {
+  const resume = guestProgress && guestProgress.progress;
+  view.innerHTML = `
+    <div class="auth-wrap">
+      <div class="auth-pitch">
+        <h1>Learn SQL by <span>actually writing it.</span></h1>
+        <p>${CHALLENGES.length} hands-on challenges across five levels, each with a short lesson and a real database to query. Pick where you start, earn XP, keep a streak, and drill the hard stuff until it is reflex.</p>
+        <ul class="pitch-points">
+          <li><span class="ico">🎯</span><div><b>Choose your difficulty.</b><br><span class="muted">Beginners start with lessons; veterans jump to window functions and drills.</span></div></li>
+          <li><span class="ico">🧪</span><div><b>Real queries, instant feedback.</b><br><span class="muted">SQLite runs in your browser. Any correct query passes, not just one "right" answer.</span></div></li>
+          <li><span class="ico">💾</span><div><b>Progress saved on this device.</b><br><span class="muted">This copy runs without a server, so XP, badges and history live in this browser. <a href="${REPO_URL}" target="_blank" rel="noopener">Run the full version</a> for accounts and a leaderboard.</span></div></li>
+        </ul>
+      </div>
+      <div class="card auth-card">
+        ${resume ? `<h2>Welcome back</h2><p class="muted small">${resume.xp} XP · ${Object.keys(resume.completions || {}).length} solved · ${resume.streak || 0}-day streak</p><button class="btn primary block lg" id="resumeBtn">Continue</button><div style="text-align:center;margin:14px 0 10px" class="small muted">or start over</div>` : '<h2>Where are you starting from?</h2>'}
+        ${levelChoiceHTML(guestProgress?.start_level || 1, 'glvl')}
+        <button class="btn ${resume ? '' : 'primary'} block lg" id="guestBtn" style="margin-top:12px">${resume ? 'Reset and start fresh' : 'Start learning'}</button>
+      </div>
+    </div>`;
+  const resumeBtn = $('#resumeBtn', view);
+  if (resumeBtn) resumeBtn.onclick = () => { state.guest = true; state.progress = { ...emptyState(), ...resume }; state.user = { username: 'Guest', start_level: guestProgress.start_level || 1, guest: true }; go('#/'); };
+  $('#guestBtn', view).onclick = () => {
+    const lvl = Number(($('input[name=glvl]:checked', view) || {}).value || 1);
+    if (resume) store.resetGuest();
+    store.startGuest(lvl);
+    go('#/');
+  };
+}
+
 function firstUnsolved(fromLevel = 1) {
   const p = state.progress;
   return CHALLENGES.find((c) => c.level >= fromLevel && !p.completions[c.id]) || CHALLENGES.find((c) => !p.completions[c.id]) || null;
@@ -447,7 +496,7 @@ function viewDashboard(view) {
     <div class="hero">
       <section class="card">
         <div class="card-head"><div><div class="muted small">${greeting}</div><h1 style="margin:0">${esc(r.title)} <span class="muted" style="font-weight:500;font-size:16px">· ${p.xp} XP</span></h1></div>
-          ${state.guest ? '<a class="btn sm primary" href="#/auth?tab=register">Save progress</a>' : ''}</div>
+          ${state.guest && state.hasServer ? '<a class="btn sm primary" href="#/auth?tab=register">Save progress</a>' : state.guest ? '<span class="chip" title="This copy runs without a server">💾 saved on this device</span>' : ''}</div>
         <div class="progress" title="${r.next ? `${r.next.xp - p.xp} XP to ${r.next.title}` : 'Max rank'}"><i style="width:${toNext}%"></i></div>
         <div class="muted small" style="margin:6px 0 14px">${r.next ? `${r.next.xp - p.xp} XP to <b>${esc(r.next.title)}</b>` : 'You hold the highest rank.'}</div>
         <div class="stat-row">
@@ -661,6 +710,12 @@ async function viewPlayground(view) {
 }
 
 async function viewLeaderboard(view) {
+  if (!state.hasServer) {
+    view.innerHTML = `<div class="ws-head"><div><div class="crumb"><a href="#/">Learn</a> › Leaderboard</div><h1>Leaderboard</h1></div></div>
+      <section class="card"><p>The leaderboard compares players across accounts, which needs the server version of SQLQuest. This copy runs entirely in your browser.</p>
+      <p class="muted small">Run it yourself: <a href="${REPO_URL}" target="_blank" rel="noopener">${REPO_URL}</a> (Node 22+, <code>npm install &amp;&amp; npm start</code>).</p></section>`;
+    return;
+  }
   view.innerHTML = '<div class="loading">Loading leaderboard…</div>';
   try {
     const { leaderboard } = await api('/leaderboard');
@@ -683,7 +738,7 @@ async function viewProfile(view) {
   const member = state.user.created_at ? `Member since ${fmtDate(state.user.created_at)}` : 'Guest (saved in this browser only)';
   view.innerHTML = `
     <div class="ws-head"><div><div class="crumb"><a href="#/">Learn</a> › Profile</div><h1>${esc(state.user.username)}</h1><p class="muted" style="margin:4px 0 0">${member} · ${esc(r.title)} · ${p.xp} XP</p></div>
-      <div class="row">${state.guest ? '<a class="btn primary" href="#/auth?tab=register">Create account to save</a>' : ''}<button class="btn" id="logoutBtn">${state.guest ? 'Exit guest mode' : 'Log out'}</button></div></div>
+      <div class="row">${state.guest && state.hasServer ? '<a class="btn primary" href="#/auth?tab=register">Create account to save</a>' : ''}${state.guest ? '<button class="btn" id="resetBtn">Reset progress</button>' : ''}<button class="btn" id="logoutBtn">${state.guest ? (state.hasServer ? 'Exit guest mode' : 'Back to start') : 'Log out'}</button></div></div>
     <div class="grid-2">
       <section class="card">
         <h3>Stats</h3>
@@ -710,7 +765,13 @@ async function viewProfile(view) {
       <div class="card-head"><h3>Recent attempts</h3><span class="muted small">${history.length} shown</span></div>
       <div class="history">${history.length ? history.map((h) => { const ch = challengeById[h.challenge_id]; return `<div class="hist"><span class="${h.correct ? 'ok' : 'no'}">${h.correct ? '✓' : '✗'}</span><span><a href="#/challenge/${h.challenge_id}">${esc(ch?.title || h.challenge_id)}</a> <span class="muted">· L${ch?.level || '?'} · ${h.mode}${h.hints_used ? ` · ${h.hints_used} hint${h.hints_used > 1 ? 's' : ''}` : ''}${h.xp_gained ? ` · +${h.xp_gained} XP` : ''}</span></span><span class="muted">${fmtDate(h.created_at)}${h.time_ms ? ` · ${fmtMs(h.time_ms)}` : ''}</span>${h.query ? `<details><summary>query</summary><pre><code>${highlight(h.query)}</code></pre></details>` : ''}</div>`; }).join('') : '<p class="muted">No attempts yet.</p>'}</div>
     </section>`;
-  $('#logoutBtn', view).onclick = async () => { await store.logout(); toast('Logged out.'); go('#/auth'); };
+  $('#logoutBtn', view).onclick = async () => { await store.logout(); toast(state.hasServer ? 'Logged out.' : 'Progress kept on this device.'); go('#/auth'); };
+  const resetBtn = $('#resetBtn', view);
+  if (resetBtn) resetBtn.onclick = () => {
+    if (resetBtn.dataset.armed) { store.resetGuest(); toast('Progress cleared.'); go('#/auth'); return; }
+    resetBtn.dataset.armed = '1'; resetBtn.textContent = 'Click again to erase everything';
+    setTimeout(() => { if (resetBtn.isConnected) { delete resetBtn.dataset.armed; resetBtn.textContent = 'Reset progress'; } }, 4000);
+  };
   $$('#lvlPick input', view).forEach((i) => i.onchange = async () => { await store.setStartLevel(Number(i.value)); toast('Starting level updated.', 'good'); });
 }
 

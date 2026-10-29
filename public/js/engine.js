@@ -10,7 +10,7 @@ const expectedCache = {};
 export async function init() {
   if (SQL) return SQL;
   if (typeof window.initSqlJs !== 'function') throw new Error('sql.js failed to load');
-  SQL = await window.initSqlJs({ locateFile: (f) => '/vendor/' + f });
+  SQL = await window.initSqlJs({ locateFile: (f) => 'vendor/' + f });
   return SQL;
 }
 

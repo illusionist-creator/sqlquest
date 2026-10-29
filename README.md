@@ -81,7 +81,18 @@ the column count disagrees with the task.
 To change the data, edit `public/js/schemas.js`. Seeds are generated from a fixed random seed,
 so reorder nothing unless you want every learner's data to change.
 
-## Deploying
+## Static hosting (GitHub Pages)
+
+Everything except accounts and the leaderboard runs in the browser, so the `public/` folder
+can be served as a static site. When the app cannot reach `api/health` it switches to a
+browser-only mode: the start screen asks for a level instead of a login, progress lives in
+`localStorage`, and the leaderboard page explains that it needs the server.
+
+`.github/workflows/pages.yml` publishes `public/` to GitHub Pages on every push to `master`
+(Settings → Pages → Source must be "GitHub Actions"). Asset and API paths are relative, so the
+site works under a project sub-path such as `/sqlquest/`.
+
+## Deploying the full version
 
 It is a single Node process with a SQLite file. Any host that runs Node 22+ and keeps a
 persistent disk works (Railway, Render, Fly.io, a VPS). Put it behind HTTPS; the session
