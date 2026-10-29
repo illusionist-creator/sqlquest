@@ -231,8 +231,10 @@ details.lesson .body p { color: var(--text); }
   position: absolute; inset: 0; margin: 0; padding: 14px 16px; border: 0; border-radius: 10px;
   font: 14px/1.55 var(--mono); white-space: pre; overflow: auto; tab-size: 2; background: transparent;
 }
-.editor pre { pointer-events: none; color: var(--text); }
-.editor textarea { color: transparent; caret-color: var(--text); resize: none; outline: none; background: transparent; }
+.editor pre { pointer-events: none; color: var(--text); z-index: 0; }
+.editor textarea { color: transparent; -webkit-text-fill-color: transparent; caret-color: var(--text); resize: none; outline: none; background: transparent; z-index: 1; -webkit-user-select: text; user-select: text; touch-action: manipulation; }
+.editor.plain pre { display: none; }
+.editor.plain textarea { color: var(--text); -webkit-text-fill-color: var(--text); }
 .editor textarea::placeholder { color: var(--muted); }
 .editor textarea::selection { background: color-mix(in srgb, var(--accent) 30%, transparent); }
 .tok-kw { color: var(--kw); font-weight: 600; }
@@ -312,4 +314,5 @@ table.lb td.r { font-weight: 800; color: var(--muted); width: 50px; }
   .auth-pitch h1 { font-size: 30px; }
   .ws-head h1 { font-size: 20px; }
   .editor { height: 190px; }
+  .editor pre, .editor textarea { font-size: 16px; } /* 16px stops iOS zooming on focus */
 }

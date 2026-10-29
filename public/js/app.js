@@ -202,8 +202,18 @@ function editorHTML(value = '', placeholder = '-- Write your SQL here. Ctrl+Ente
 }
 function bindEditor(root, { onRun, onCheck, onChange } = {}) {
   const ta = $('textarea', root), pre = $('pre', root), code = $('pre code', root);
-  const sync = () => { code.innerHTML = highlight(ta.value) + '\n'; pre.scrollTop = ta.scrollTop; pre.scrollLeft = ta.scrollLeft; };
-  ta.addEventListener('input', () => { sync(); onChange && onChange(ta.value); });
+  const sync = () => {
+    try { code.innerHTML = highlight(ta.value) + '\n'; pre.scrollTop = ta.scrollTop; pre.scrollLeft = ta.scrollLeft; }
+    catch (e) { root.classList.add('plain'); console.error('editor overlay failed, showing plain text', e); }
+  };
+  // Anything inside the editor box should focus the textarea (covers touch devices and overlay quirks).
+  root.addEventListener('pointerdown', (e) => { if (e.target !== ta) { e.preventDefault(); ta.focus(); } });
+  ta.addEventListener('input', () => {
+    sync();
+    // Safety net: if the overlay is not mirroring typed text, fall back to a plain visible textarea.
+    if (ta.value.trim() && !code.textContent.trim()) root.classList.add('plain');
+    onChange && onChange(ta.value);
+  });
   ta.addEventListener('scroll', () => { pre.scrollTop = ta.scrollTop; pre.scrollLeft = ta.scrollLeft; });
   ta.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); (e.shiftKey && onCheck ? onCheck : onRun)?.(); }
